@@ -8,7 +8,8 @@ import {
     TouchableOpacity,
     Platform,
     TextInput,
-    ScrollView
+    ScrollView,
+    Alert
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
 
@@ -31,10 +32,9 @@ const SignInScreen = ({navigation}) => {
         });
     }
     
-     //User Login
     const userSignin = async () => {
       if(!email || !password) {
-        alert("Заполните все поля")
+        Alert.alert("","Заполните все поля")
       }
       try{
         const newReg = await auth().signInWithEmailAndPassword(email,password)
@@ -43,7 +43,7 @@ const SignInScreen = ({navigation}) => {
         return newReg
         
       }catch(err){
-        alert('Введённые данные некорректны');
+        Alert.alert("",'Введённые данные некорректны');
       }
     }
 
@@ -65,6 +65,7 @@ const SignInScreen = ({navigation}) => {
                 <View style={styles.action}>
                     <TextInput
                         placeholder="Введите почту"
+                        placeholderTextColor='#999'
                         style={styles.textInput}
                         autoCapitalize="none"
                         value={email}
@@ -77,6 +78,7 @@ const SignInScreen = ({navigation}) => {
                 <View style={styles.action}>
                   <TextInput
                       placeholder="Введите пароль"
+                      placeholderTextColor='#999'
                       secureTextEntry={data.secureTextEntry ? true : false}
                       style={styles.textInput}
                       autoCapitalize="none"

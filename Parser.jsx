@@ -14,16 +14,16 @@ const useAveragePrice = (searchQuery) => {
     const fetchAveragePrice = async () => {
       try {
         const response = await fetch(
-          `https://search.wb.ru/exactmatch/ru/common/v4/search?curr=rub&lang=ru&locale=ru&query=${encodeURIComponent(searchQuery)}&resultset=catalog&page=0`
-        );
+                  `https://search.wb.ru/exactmatch/ru/common/v4/search?curr=rub&lang=ru&locale=ru&query=${encodeURIComponent(searchQuery)}&resultset=catalog&page=0`);
 
         if (!response.ok) throw new Error(`${response.status}`);
 
         const data = await response.json();
-        const products = data?.data?.products || [];
-
+        const products = data['data']['products'] || [];
+        
         if (products.length > 0) {
-          const prices = products.map((product) => product.salePriceU / 100);
+          const prices = products.slice(0, 10).map((product) => product.salePriceU/100);
+          const prs = products.slice(0, 10).map((product) => [product.salePriceU/100, product.name]);
           const avg = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
           setAveragePrice(avg);
         } else {

@@ -1,11 +1,3 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- * @flow strict-local
- */
-
 import React, { useEffect, useState, useCallback} from 'react';
 import {
   SafeAreaView,
@@ -16,89 +8,128 @@ import {
   FlatList,
   useColorScheme,
   View,
+  TouchableOpacity,
 } from 'react-native';
 import Icon from '@react-native-vector-icons/ionicons';
-import {GiftedChat,Bubble,InputToolbar} from 'react-native-gifted-chat'
+import {GiftedChat, Bubble, InputToolbar, Send} from 'react-native-gifted-chat'
 import firestore from '@react-native-firebase/firestore'
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { ScrollView } from 'react-native-virtualized-view';
 
-const ChatScreen = ({user, route}) => {
+import dayru from 'dayjs/locale/ru';
+locale={dayru}
+
+const ChatScreen = ({ user, route }) => {
   const [messages, setMessages] = useState([]);
-  const {uid} = route.params;
-  // const mainuser = user[0]
+  const { uid } = route.params;
+  const docid = uid > user.uid ? user.uid + "-" + uid : uid + "-" + user.uid;
 
-  console.log(uid, user.uid);
-
-  const getAllMessages = async () => {
-    const docid = uid > user.uid ? user.uid+"-"+uid : uid+"-"+user.uid   
-    const msgResponse = await firestore().collection('Chats')
-    .doc(docid)
-    .collection('messages')
-    .orderBy('createdAt', "desc")
-    .get()
-    const allTheMsgs = msgResponse.docs.map(docSanp => {
-      return {
-        ...docSanp.data(),
-        createdAt:docSanp.data().createdAt.toDate()
-      }
-    })
-    setMessages(allTheMsgs)
-  }
-  
   useEffect(() => {
-    getAllMessages()
-  },[]);
+    const unsubscribe = firestore()
+      .collection('Chats')
+      .doc(docid)
+      .collection('messages')
+      .orderBy('createdAt', 'desc')
+      .onSnapshot(querySnapshot => {
+        const allTheMsgs = querySnapshot.docs.map(docSnap => {
+          const data = docSnap.data();
+          return {
+            ...data,
+            createdAt: data.createdAt ? data.createdAt.toDate() : new Date(),
+            _id: docSnap.id,
+          };
+        });
+        setMessages(allTheMsgs);
+      });
 
-  const onSend = (msgArray) => {
-    const msg = msgArray[0]
+    return () => unsubscribe();
+  }, [docid]);
+
+  const onSend = async (msgArray = []) => {
+    const msg = msgArray[0];
     const usermsg = {
       ...msg,
       sentBy: user.uid,
       sentTo: uid,
-      createdAt: new Date()
+      createdAt: firestore.FieldValue.serverTimestamp(),
+    };
+
+    setMessages(previousMessages => GiftedChat.append(previousMessages, { ...usermsg, createdAt: new Date() }));
+
+    const chatRef = firestore().collection('Chats').doc(docid);
+    const messagesRef = chatRef.collection('messages');
+
+    try {
+      const messageDocRef = await messagesRef.add(usermsg);
+      await chatRef.set(
+        {
+          lastMessage: msg.text || '', 
+          lastMessageCreatedAt: firestore.FieldValue.serverTimestamp(),
+          users: firestore.FieldValue.arrayUnion(user.uid, uid),
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      console.error("Ошибка отправки сообщения: ", error);
     }
-    console.log(usermsg.sentBy, usermsg.sentTo, usermsg.createdAt )
-
-    setMessages(previousMessages => GiftedChat.append(previousMessages, usermsg))
-    const docid = uid > user.uid ? user.uid+ "-" +uid : uid+ "-" +user.uid
-    
-    firestore().collection('Chats')
-    .doc(docid)
-    .collection('messages')
-    .add({...usermsg,createdAt:firestore.FieldValue.serverTimestamp()})
-  }
-
+  };
+  
+  const renderChatEmpty = () => {
+    return (
+      <View style={styles.emptyChat}>
+        <Text style={styles.emptyChatText}>
+          Начните общение
+        </Text>
+      </View>
+    );
+  };
+  
+  const renderSend = (props) => {
+    return (
+      <Send {...props} containerStyle={styles.sendContainer}>
+        <View style={styles.sendButtonContainer}>
+          <Icon name="paper-plane" size={24} color="#D16002" />
+        </View>
+      </Send>
+    );
+  };
 
   return (
-     <GiftedChat 
-     style={{flex: 1}}
-     messages={messages}
-     onSend={text => onSend(text)}
-     user={{ 
-       _id: user.uid,
+    <GiftedChat
+      style={{ flex: 1 }}
+      messages={messages}
+      onSend={messages => onSend(messages)}
+      user={{
+        _id: user.uid,
       }}
-       renderBubble={(props)=>{
-                    return <Bubble
-                    {...props}
-                    wrapperStyle={{
-                      right: {
-                        backgroundColor:"#D16002",
-
-                      }
-                      
-                    }}
-                  />
-                }}
-
-                renderInputToolbar={(props)=>{
-                    return <InputToolbar {...props}
-                     containerStyle={{borderTopWidth: 1.5, borderTopColor: '#D16002'}} 
-                     textInputStyle={{ color: "black" }}
-                     />
-                }}
-      />
+      placeholder="Введите текст сообщения"
+      timeFormat="HH:mm"
+      dateFormat="ll"
+      locale="ru"
+      renderBubble={(props) => (
+        <Bubble
+          {...props}
+          wrapperStyle={{
+            right: {
+              backgroundColor: "#D16002",
+            },
+          }}
+        />
+      )}
+      renderInputToolbar={(props) => (
+        <InputToolbar
+          {...props}
+          containerStyle={{ borderTopWidth: 1.5, borderTopColor: '#D16002' }}
+          textInputStyle={{ color: "black" }}
+        />
+      )}
+      renderChatEmpty={renderChatEmpty}
+      renderSend={renderSend}
+      listViewProps={{
+        ListEmptyComponent: renderChatEmpty
+      }}
+    />
   );
 };
 
@@ -172,6 +203,30 @@ const styles = StyleSheet.create({
   highlight: {
     fontWeight: '700',
   },
+  emptyChat: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    transform: [{ scaleX: -1},{scaleY:-1}],
+    marginTop: 20
+  },
+  emptyChatText: {
+    fontSize: 16,
+    color: '#888',
+    fontWeight: '500'
+  },
+  sendContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 5,
+    marginBottom: 5
+  },
+  sendButtonContainer: {
+    height: 40,
+    width: 40,
+    justifyContent: 'center',
+    alignItems: 'center'
+  }
 });
 
 export default ChatScreen;

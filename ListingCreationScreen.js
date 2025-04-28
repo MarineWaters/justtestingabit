@@ -1,228 +1,488 @@
-import React, {useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-    View,
-    Text,
-    Button,
-    Dimensions,
-    StyleSheet,
-    TouchableOpacity,
-    Platform,
-    TextInput,
-    ScrollView
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  ScrollView,
+  Alert,
+  Image
 } from 'react-native';
-import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
-import averagePriceInt from './Parser';
+import firestore from '@react-native-firebase/firestore';
+import Icon from '@react-native-vector-icons/ionicons';
+import { MultiSelect, Dropdown } from 'react-native-element-dropdown';
+import useAveragePrice from './Parser';
+import { TextInput } from 'react-native-gesture-handler';
+import { launchImageLibrary } from 'react-native-image-picker';
+import {CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET2 } from '../conf'
 
-export default ListingCreationScreen = ({user, navigation}) => {
-    const [title, setTitle] = useState('');
-    const [desc, setDesc] = useState('');
-    const [cat, setCat] = useState('');
-    const [ex_cat, setExcat] = useState('');
-    const [data, setData] = React.useState({
-        title: '',
-        user_id: user.uid,
-        desc: '',
-        cat: '',
-        ex_cat: '',
-        photo: [''],
-        timestamp: null,
-        status: true,
-        r_price: null
+export default function ListingCreationScreen({ user, navigation }) {
+  const [title, setTitle] = useState('');
+  const [desc, setDesc] = useState('');
+  const [categoriesData, setCategoriesData] = useState(null);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [errorCategories, setErrorCategories] = useState(null);
+  const [catMain, setCatMain] = useState(null);
+  const [catSub, setCatSub] = useState(null);
+  const [exCatMain, setExCatMain] = useState([]);
+  const [exCatSubs, setExCatSubs] = useState([]);
+  const searchQuery = catMain ? `${catMain} ${title}` : null;
+  const averagePrice = useAveragePrice(searchQuery);
+  const [mediaUrls, setMediaUrls] = useState([]);
+  const [uploading, setUploading] = useState(false);
+
+  const handleMediaUpload = async () => {
+    const options = {
+      mediaType: 'photo', 
+      quality: 0.7,
+      selectionLimit: 0,
+    };
+
+    launchImageLibrary(options, async (response) => {
+      if (response.didCancel) {
+        console.log('Отмена выбора изображения');
+      } else if (response.errorCode) {
+        console.log('Ошибка выбора изображения: ', response.errorCode, response.errorMessage);
+        Alert.alert('Ошибка выбора изображения', 'Произршла ошибка.');
+      } else if (response.assets && response.assets.length > 0) {
+        setUploading(true);
+        const uploadPromises = response.assets.map(async (asset) => {
+          const fileUri = asset.uri;
+          const fileName = fileUri.split('/').pop();
+          const fileType = asset.type;
+
+          const formData = new FormData();
+          formData.append('file', {
+            uri: fileUri,
+            name: fileName,
+            type: fileType,
+          });
+          formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET2);
+          formData.append('cloud_name', CLOUDINARY_CLOUD_NAME);
+
+          try {
+            const cloudinaryResponse = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, {
+              method: 'POST',
+              body: formData,
+            });
+
+            const data = await cloudinaryResponse.json();
+            if (data.secure_url) {
+              return data.secure_url;
+            } else {
+              console.error('Ошибка загрузки в Cloudinary:', data);
+              Alert.alert('Ошибка загрузки', 'Не получилось загрузить выбранный медиаконтент.');
+              return null;
+            }
+          } catch (error) {
+            console.error('Ошибка загрузки в Cloudinary:', error);
+            Alert.alert('Ошибка загрузки', 'Не получилось загрузить выбранный медиаконтент.');
+            return null;
+          }
+        });
+
+        const uploadedUrls = (await Promise.all(uploadPromises)).filter(url => url !== null);
+        setMediaUrls(uploadedUrls);
+        setUploading(false);
+      }
     });
+  };
 
-    const confirmation = async () => {
-      if(!title || !cat || !ex_cat || !desc) {
-        alert("Заполните все поля")
-      }
-      try{
-        const randCat = await fetch('https://thecatapi.com/api/images/get?format=src')
-        const response = await fetch(
-          `https://search.wb.ru/exactmatch/ru/common/v4/search?curr=rub&lang=ru&locale=ru&query=${encodeURIComponent(cat)}&resultset=catalog&page=0`
-        )
-        const data = await response.json()
-        const products = data?.data?.products.slice(0,9)
-        const prices = products.map((product) => product.salePriceU / 100)
-        const avprice = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length)
-        newdata = ({
-            ... data,
-            title: title,
-            timestamp: new Date(),
-            cat: cat,
-            ex_cat: ex_cat,
-            desc: desc,
-            photo: [randCat.url],
-            //r_price: avprice//averagePriceInt(cat)
-        })
-        firestore().collection('Listings').add(newdata)
-        navigation.navigate('Own')
-         }catch(err){
-            console.log(err)
-            alert('Неуспешно.')
-      }
-      }
-      
-
-    return (
-        <View style={[styles.container, {
-            paddingTop: 35
-        }]}>
-            <View style={styles.header}>
-                <Text style={styles.text_header}>Создание предложения</Text>
-                <Text style={styles.headerTitle}>Введите данные для создания объявления.</Text>
-            </View>
-            <View style={styles.footer}>
-                
-                <Text style={[styles.text_footer, {
-                    marginTop: 25
-                }]}>Название</Text>
-                <View style={styles.action}>
-                    <TextInput
-                        placeholder="Введите название"
-                        style={styles.textInput}
-                        autoCapitalize="none"
-                        value={title}
-                        onChangeText={(text)=>{
-                            console.log('set title') 
-                            setTitle(text)}}
-                    />
-                </View>
-                <Text style={[styles.text_footer, {
-                    marginTop: 25
-                }]}>Описание</Text>
-                <View style={styles.action}>
-                    <TextInput
-                        placeholder="Введите описание"
-                        style={styles.textInput}
-                        autoCapitalize="none"
-                        value={desc}
-                        onChangeText={(text)=>{
-                            console.log('set desc') 
-                            setDesc(text)}}
-                    />
-                </View>
-                <Text style={[styles.text_footer, {
-                  marginTop: 25
-                }]}>Предложение</Text>
-                <View style={styles.action}>
-                  <TextInput
-                      placeholder="Выберите товар, который предлагаете"
-                      style={styles.textInput}
-                      autoCapitalize="none"
-                      value={cat}
-                      onChangeText={(text)=>{
-                        console.log('set cat') 
-                        setCat(text)}}
-                  />
-                </View>
-                <Text style={[styles.text_footer, {
-                    marginTop: 25
-                }]}>Запрос</Text>
-                <View style={styles.action}>
-                    <TextInput
-                        placeholder="Выберите товар, который хотите получить"
-                        style={styles.textInput}
-                        autoCapitalize="none"
-                        value={ex_cat}
-                        onChangeText={(text)=>{
-                            console.log('set excat') 
-                            setExcat(text)}}
-                    />
-                </View>
-
-               
-                    <TouchableOpacity
-                        onPress={()=>confirmation()}
-                        style={[styles.signIn, {
-                            borderColor: '#D16002',
-                            borderWidth: 1,
-                            marginTop: 15,
-                        }]}
-                    >
-
-                        <Text style={[styles.textSign, {
-                            color: '#D16002'
-                        }]}> Создать </Text>
-
-                    </TouchableOpacity>
-                    <View style={{marginTop: 10, alignItems: 'center'}}>
-                    </View> 
-                </View>
-
-            </View>
+  const handleDeleteMedia = (indexToDelete) => {
+    Alert.alert(
+      'Удалить',
+      'Вы уверены, что хотите удалить этот ресурс?',
+      [
+        {
+          text: 'Отмена',
+          style: 'cancel',
+        },
+        {
+          text: 'Удалить',
+          onPress: () => {
+            setMediaUrls(mediaUrls.filter((_, index) => index !== indexToDelete));
+          },
+        },
+      ],
+      { cancelable: false }
     );
-};
+  };
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const doc = await firestore()
+          .collection('Categories')
+          .doc('YWdWBjQnaViSvDCudPpr')
+          .get();
 
+        if (doc.exists) {
+          const data = doc.data();
+          setCategoriesData(data);
+        } else {
+          setErrorCategories('Категории не найдены');
+        }
+      } catch (err) {
+        setErrorCategories('Ошибка при загрузке категорий');
+        console.error(err);
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
 
+    fetchCategories();
+  }, []);
 
- const {height} = Dimensions.get("screen");
- const height_logo = height * 0.28;
+  const mainCategoriesData = categoriesData
+    ? Object.keys(categoriesData).map((key) => ({ label: key, value: key }))
+    : [];
 
- const styles = StyleSheet.create({ 
-container: {
-     flex: 1,
-     backgroundColor: '#D16002'
-   },
-   header: {
-     flex: 1,
-     justifyContent: 'flex-end',
-     paddingHorizontal: 20,
-     paddingBottom: 50
-     },
-   footer: {
-     flex: 3,
-     backgroundColor: '#fff',
-     borderTopLeftRadius: 30,
-     borderTopRightRadius: 30,
-     paddingVertical: 20,
-     paddingHorizontal: 30
-   },
-   text_header: {
-     color: '#fff',
-     fontWeight: 'bold',
-     fontSize: 30
-   },
-   text_footer: {
-     color: '#05375a',
-     fontSize: 18
-   },
-   title: {
-     color: '#05375a',
-     fontSize: 14,
-     fontWeight: 'bold'
-   },
-   headerTitle: {
-     paddingTop: 5,
-     color: '#fff',
-     fontSize: 14,
-     fontWeight: 'bold'
-   },
-   action: {
-     flexDirection: 'row',
-     marginTop: 10,
-     borderBottomWidth: 1,
-     borderBottomColor: '#f2f2f2',
-     paddingBottom: 5
-   },
-   textInput: { 
-     flex: 1,
-     marginTop: Platform.OS === 'ios' ? 0 : -12,
-     paddingLeft: 10,
-     color: '#05375a',
-   },
-   button: {
-     alignItems: 'center',
-     marginTop: 50
-   },
-   signIn: {
-     width: '100%',
-     height: 50,
-     justifyContent: 'center',
-     alignItems: 'center',
-     borderRadius: 10,
-   },
-   textSign: {
-     fontSize: 18,
-     fontWeight: 'bold'
-   }
+  const catSubcategoriesData =
+    catMain && categoriesData && categoriesData[catMain]
+      ? categoriesData[catMain].map((sub) => ({ label: sub, value: sub }))
+      : [];
 
- })
+  const exCatSubcategoriesData = [];
+
+  if (categoriesData && exCatMain.length > 0) {
+    exCatMain.forEach((mainCat) => {
+      const subs = categoriesData[mainCat] || [];
+      subs.forEach((sub) => {
+        exCatSubcategoriesData.push({
+          label: `${mainCat} - ${sub}`,
+          value: `${mainCat} - ${sub}`,
+        });
+      });
+    });
+  }
+
+  const confirmation = async () => {
+    if (
+      !title ||
+      !desc ||
+      !catMain ||
+      !catSub ||
+      exCatMain.length === 0 ||
+      exCatSubs.length === 0
+    ) {
+      Alert.alert('Ошибка', 'Заполните все поля');
+      return;
+    }
+
+    try {
+      const newdata = {
+        user_id: user.uid,
+        timestamp: new Date(),
+        status: true,
+        r_price: averagePrice,
+        title: title,
+        cat: {
+          main: catMain,
+          sub: catSub,
+        },
+        ex_cat: {
+          main: exCatMain,
+          subs: exCatSubs,
+        },
+        desc: desc,
+        photo: mediaUrls,
+      };
+      await firestore().collection('Listings').add(newdata);
+      navigation.navigate('Own');
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Error', 'Failed to create listing.');
+    }
+  };
+
+  if (loadingCategories) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <Text>Загрузка категорий...</Text>
+      </View>
+    );
+  }
+
+  if (errorCategories) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <Text style={{ color: 'red' }}>{errorCategories}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Введите данные для создания объявления.</Text>
+      </View>
+
+      <View style={styles.footer}>
+        <Text style={[styles.text_footer, { marginTop: 25 }]}>Название</Text>
+        <View style={styles.action}>
+          <TextInput
+            placeholder="Введите название"
+            placeholderTextColor="#999"
+            style={styles.textInput}
+            autoCapitalize="none"
+            value={title}
+            onChangeText={setTitle}
+          />
+        </View>
+
+        <Text style={[styles.text_footer, { marginTop: 25 }]}>Описание</Text>
+        <View style={styles.action}>
+          <TextInput
+            placeholder="Введите описание"
+            placeholderTextColor="#999"
+            style={styles.textInput}
+            autoCapitalize="none"
+            value={desc}
+            onChangeText={setDesc}
+          />
+        </View>
+
+        <Text style={[styles.text_footer, { marginTop: 25 }]}>
+          Предложение - Основная категория
+        </Text>
+        <Dropdown
+          style={styles.dropdown}
+          data={mainCategoriesData}
+          labelField="label"
+          valueField="value"
+          placeholder="Выберите основную категорию"
+          value={catMain}
+          onChange={(item) => {
+            setCatMain(item.value);
+            setCatSub(null);
+          }}
+          maxHeight={200}
+          showsVerticalScrollIndicator={false}
+        />
+
+        <Text style={[styles.text_footer, { marginTop: 15 }]}>Предложение - Подкатегория</Text>
+        <Dropdown
+          style={styles.dropdown}
+          data={catSubcategoriesData}
+          labelField="label"
+          valueField="value"
+          placeholder="Выберите подкатегорию"
+          value={catSub}
+          onChange={(item) => setCatSub(item.value)}
+          maxHeight={200}
+          showsVerticalScrollIndicator={false}
+          disabled={!catMain}
+        />
+
+        <Text style={[styles.text_footer, { marginTop: 25 }]}>
+          Запрос - Основные категории (можно выбрать несколько)
+        </Text>
+        <MultiSelect
+          style={styles.dropdown}
+          placeholderStyle={styles.placeholderStyle}
+          selectedTextStyle={styles.selectedTextStyle}
+          inputSearchStyle={styles.inputSearchStyle}
+          iconStyle={styles.iconStyle}
+          data={mainCategoriesData}
+          labelField="label"
+          valueField="value"
+          placeholder="Выберите основные категории"
+          value={exCatMain}
+          search
+          searchPlaceholder="Поиск..."
+          onChange={item => {
+            setExCatMain(item);
+            const newExCatSubs = exCatSubs.filter(sub => {
+              const mainCat = sub.split(' - ')[0];
+              return item.includes(mainCat);
+            });
+            setExCatSubs(newExCatSubs);
+          }}
+          selectedStyle={styles.selectedStyle}
+        />
+
+        <Text style={[styles.text_footer, { marginTop: 15 }]}>
+          Запрос - Подкатегории (можно выбрать несколько)
+        </Text>
+        <MultiSelect
+          style={styles.dropdown}
+          placeholderStyle={styles.placeholderStyle}
+          selectedTextStyle={styles.selectedTextStyle}
+          inputSearchStyle={styles.inputSearchStyle}
+          iconStyle={styles.iconStyle}
+          data={exCatSubcategoriesData}
+          labelField="label"
+          valueField="value"
+          placeholder={
+            exCatMain.length === 0
+              ? 'Сначала выберите основные категории'
+              : 'Выберите подкатегории'
+          }
+          value={exCatSubs}
+          search
+          searchPlaceholder="Поиск..."
+          onChange={item => {
+            setExCatSubs(item);
+          }}
+          selectedStyle={styles.selectedStyle}
+          disabled={exCatMain.length === 0}
+        />
+
+        <Text style={[styles.text_footer, { marginTop: 25 }]}>Загрузка медиаконтента (Необязательно)</Text>
+      <TouchableOpacity style={styles.uploadButton} onPress={handleMediaUpload} disabled={uploading}>
+        <Text style={styles.uploadButtonText}>
+          {uploading ? 'Загружаем...' : 'Загрузить'}
+        </Text>
+      </TouchableOpacity>
+
+      <View style={styles.imagePreviewContainer}>
+        {mediaUrls.map((url, index) => (
+          <View key={index} style={styles.imageWrapper}>
+            <Image source={{ uri: url }} style={styles.previewImage} />
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => handleDeleteMedia(index)}
+            >
+              <Icon name="trash-outline" size={24} color="white" />
+            </TouchableOpacity>
+          </View>
+        ))}
+      </View>
+
+        <TouchableOpacity
+          onPress={confirmation}
+          style={[styles.signIn, { borderColor: '#D16002', borderWidth: 1, marginTop: 30 }]}
+        >
+          <Text style={[styles.textSign, { color: '#D16002' }]}>Создать</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#D16002',
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 20,
+    paddingBottom: 50,
+  },
+  footer: {
+    flex: 3,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingVertical: 20,
+    paddingHorizontal: 30,
+  },
+  text_header: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 30,
+  },
+  text_footer: {
+    color: '#05375a',
+    fontSize: 18,
+  },
+  headerTitle: {
+    paddingTop: 5,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  action: {
+    flexDirection: 'row',
+    marginTop: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f2f2f2',
+    paddingBottom: 5,
+  },
+  textInput: {
+    flex: 1,
+    marginTop: -12,
+    paddingLeft: 10,
+    color: '#05375a',
+  },
+  dropdown: {
+    height: 50,
+    borderColor: '#D16002',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    marginTop: 5,
+  },
+  selectedStyle: {
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    borderColor: '#D16002',
+    borderWidth: 2,
+    color: '#D16002',
+    marginRight: 8,
+  },
+   placeholderStyle: {
+    fontSize: 16,
+  },
+  selectedTextStyle: {
+    fontSize: 14,
+  },
+  iconStyle: {
+    width: 20,
+    height: 20,
+  },
+  inputSearchStyle: {
+    height: 40,
+    fontSize: 16,
+  },
+  signIn: {
+    width: '100%',
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  textSign: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  uploadButton: {
+    backgroundColor: '#D16002',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  uploadButtonText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  imagePreviewContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 10,
+  },
+  imageWrapper: {
+    alignItems: 'center',
+    marginRight: 10,
+    marginBottom: 10,
+  },
+  previewImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 5,
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    padding: 2,
+    borderRadius: 5,
+  },
+});

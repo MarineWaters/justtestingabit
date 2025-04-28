@@ -16,12 +16,15 @@ import OwnListingScreen from './screens/OwnListingsScreen';
 import ListingScreen from './screens/ListingScreen';
 import SearchScreen from './screens/SearchScreen';
 import ListingCreationScreen from './screens/ListingCreationScreen';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import EditListingScreen from './screens/EditListingScreen';
+import ChainScreen from './screens/ChainScreen';
+import SingleChainScreen from './screens/SingleChainScreen';
+import ChainCreationScreen from './screens/ChainCreationScreen';
 
 const Tab = createBottomTabNavigator();
  
 const Stack = createNativeStackNavigator();
-
-
 <Stack.Navigator screenOptions = {{ 
      headerStyle: {
        backgroundColor: '#D16002',
@@ -31,8 +34,12 @@ const Stack = createNativeStackNavigator();
        fontWeight: 'bold',
      },
     }}>
-      <Stack.Screen name="Chats" component={ChatScreen} />
-      <Stack.Screen name="Listing" component={ListingScreen} />
+      <Stack.Screen name="Chats" component={ChatScreen}  />
+      <Stack.Screen name="Listing" component={ListingScreen} options={{ title: 'Объявление' }}/>
+      <Stack.Screen name="Edit" component={EditListingScreen} options={{ title: 'Изменение' }}/>
+      <Stack.Screen name="Chains" component={ChainScreen} options={{ title: 'Цепочки' }}/>
+      <Stack.Screen name="SingleChain" component={SingleChainScreen} options={{ title: 'Цепочка' }}/>
+      <Stack.Screen name="ChainCreation" component={ChainCreationScreen} options={{ title: 'Создание цепочки' }}/>
     </Stack.Navigator>
  const msgsName = 'Messages';
  const profileName = 'Profile';
@@ -79,30 +86,35 @@ const Stack = createNativeStackNavigator();
     
      <Tab.Screen
       name="Messages"
+      options={{ tabBarLabel: 'Чаты', title: 'Чаты' }}
       >
      {props => <MessageScreen {...props} user={user}/>}
       </Tab.Screen>
 
       <Tab.Screen
       name="Search"
+      options={{ tabBarLabel: 'Поиск', title: 'Поиск' }}
       >
      {props => <SearchScreen {...props} user={user}/>}
       </Tab.Screen>
 
       <Tab.Screen
       name="Create"
+      options={{ tabBarLabel: 'Создание', title: 'Создание объявления' }}
       >
      {props => <ListingCreationScreen {...props} user={user}/>}
       </Tab.Screen>
 
       <Tab.Screen
       name="Own"
+      options={{ tabBarLabel: 'Своё', title: 'Собственные объявления' }}
       >
      {props => <OwnListingScreen {...props} user={user}/>}
       </Tab.Screen>
       
     <Tab.Screen
       name="Profile"
+      options={{ tabBarLabel: 'Профиль', title: 'Профиль' }}
     >
      {props => <ProfileScreen {...props} user={user}/>}
      </Tab.Screen>
@@ -128,6 +140,7 @@ const Stack = createNativeStackNavigator();
 
   return(
     <KeyboardProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
   <NavigationContainer >
         <Stack.Navigator screenOptions = {{ 
           headerStyle: {
@@ -150,9 +163,27 @@ const Stack = createNativeStackNavigator();
           headerBackTitleVisible: false })}>
         {props => <ChatScreen {...props} user={user}/>}
         </Stack.Screen>
-        <Stack.Screen name="Listing" options={({route}) => ({ title: route.params.name,
+        <Stack.Screen name="Listing" options={({route}) => ({ title: 'Просмотр объявления',
           headerBackTitleVisible: false })}>
         {props => <ListingScreen {...props} listing={null}/>}
+        </Stack.Screen>
+        <Stack.Screen name="Edit" options={({route}) => ({ title: 'Изменение объявления',
+          headerBackTitleVisible: false })}>
+        {props => <EditListingScreen {...props} listing={null}/>}
+        </Stack.Screen>
+        <Stack.Screen name="SingleChain" options={({route}) => ({ title: 'Просмотр цепочки',
+          headerBackTitleVisible: false })}>
+        {props => <SingleChainScreen {...props} user={user}/>}
+        </Stack.Screen>
+        <Stack.Screen name="ChainCreation" options={({route}) => ({ title: 'Создание цепочки',
+          headerBackTitleVisible: false })}>
+        {props => <ChainCreationScreen {...props} user={user}/>}
+        </Stack.Screen>
+        <Stack.Screen name="Chains" options={{
+        title: 'Цепочки',
+        headerBackTitleVisible: false,
+        }}>
+        {props => <ChainScreen {...props} user={user}/>}
         </Stack.Screen>
         </>
        
@@ -172,6 +203,7 @@ const Stack = createNativeStackNavigator();
         
       </Stack.Navigator>
 </NavigationContainer>
+</GestureHandlerRootView>
 </KeyboardProvider>
  )};
 

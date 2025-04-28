@@ -8,10 +8,12 @@ import {
     TouchableOpacity,
     Platform,
     TextInput,
-    ScrollView
+    ScrollView,
+    Alert
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import { AUTO} from '../conf'
 
 export default SignUpScreen = ({navigation}) => {
 
@@ -34,19 +36,20 @@ export default SignUpScreen = ({navigation}) => {
 
     const userRegistration = async () => {
       if(!email || !password || !name) {
-        alert("Пожалуйста, заполните все поля.")
+        Alert.alert("","Пожалуйста, заполните все поля.")
       }
       try{
         const newReg = await auth().createUserWithEmailAndPassword(email,password)
-        const randCat = await fetch('https://thecatapi.com/api/images/get?format=src');
         firestore().collection('users').doc(newReg.user.uid).set({
           name: name,
           email: newReg.user.email,
           uid: newReg.user.uid,
-          photo: randCat.url
+          photo: AUTO, 
+          aboutMe: ''
         })
          }catch(err){
-            alert('Введённые данные не подходят.');
+            console.log(err)
+            Alert.alert("",'Введённые данные не подходят. Убедитесь, что пароль имеет не менее 8 символов.');
 
       }
     }
